@@ -139,3 +139,52 @@ Las gráficas trazan funciones sobre una rejilla de salarios y *no* estiman la r
 - BOE, Orden PJC/178/2025 de bases y tipos de cotización a la Seguridad Social: https://www.boe.es/buscar/act.php?id=BOE-A-2025-3780
 
 La lógica de cálculo y generación de las gráficas está en `boring_ahh_comparison.py`. El CSV de 1.501 puntos permite consultar la curva completa. Los gráficos incluidos son `boring_ahh_comparison_amounts.png` y `boring_ahh_comparison_rates.png`.
+
+
+= Prueba: interpolación PCHIP y anclaje del 20% en el doble de la media
+
+== Diseño de la prueba
+
+Para observar el efecto de cambiar el punto medio, se desplaza el anclaje del 20% desde la renta media hasta dos veces la renta media. Con la media salarial oficial INE 2024 de 29.540,26 euros, el nuevo punto queda en 59.080,52 euros. Se mantienen la mediana en 24.497,17 euros, el SMI 2025 en 16.576 euros y el punto superior hipotético de 1.000.000 euros.
+
+Se prueba PCHIP (*Piecewise Cubic Hermite Interpolating Polynomial*), una interpolación cúbica por tramos que conserva la monotonía entre anclajes crecientes y evita oscilaciones artificiales. Comparamos dos interpretaciones:
+
+- *PCHIP de tasa efectiva:* los valores de 0%, 10%, 20% y 50% son tasas efectivas aplicadas a toda la renta. El impuesto es renta multiplicada por la tasa interpolada.
+- *PCHIP de tasa marginal acumulada:* esos valores se interpretan como tipos marginales; el impuesto total se calcula integrando el tipo marginal desde el SMI hasta la renta. Así, cada euro adicional tributa al tipo marginal correspondiente.
+
+== Resultados de la prueba
+
+Los importes de cotización social corresponden al mismo escenario aproximado de trabajador indefinido en Madrid descrito antes. En las dos alternativas se mantienen esas cotizaciones.
+
+#table(
+  columns: (1.1fr, 1fr, 1fr, 1fr, 1.1fr, 1.1fr, 1.1fr),
+  inset: 4pt,
+  [*Renta bruta*], [*IRPF actual aprox.*], [*Cotización trabajador*], [*Impuesto PCHIP efectivo*], [*Total PCHIP efectivo + SS*], [*Impuesto marginal integrado*], [*Total marginal + SS*],
+  [16.576,00], [116,98], [1.074,12], [0,00], [1.074,12], [0,00], [1.074,12],
+  [24.497,17], [3.203,60], [1.587,42], [2.449,72], [4.037,13], [443,23], [2.030,65],
+  [29.540,26], [4.514,73], [1.914,21], [3.698,63], [5.612,84], [1.012,86], [2.927,06],
+  [59.080,52], [13.650,39], [3.817,88], [11.816,10], [15.633,98], [6.094,37], [9.912,24],
+  [100.000,00], [30.820,06], [3.888,62], [23.025,31], [26.913,93], [14.904,07], [18.792,69],
+  [1.000.000,00], [430.932,79], [5.598,62], [500.000,00], [505.598,62], [391.777,94], [397.376,56],
+)
+
+#figure(
+  image("boring_ahh_interpolation_test.png", width: 100%),
+  caption: [Comparación del sistema de referencia con las dos interpretaciones de la curva PCHIP.],
+)
+
+== Lectura e interpretación
+
+La variante efectiva mantiene el significado de la fórmula original: en la mediana, el impuesto propio es 10% de la renta, es decir, 2.449,72 euros. El cambio a PCHIP suaviza las transiciones de la tasa, pero el impuesto sigue aplicándose a toda la renta; por eso el impuesto total puede cambiar más al variar el salario.
+
+En la variante marginal, el 10% en la mediana significa que el tipo marginal allí es 10%, no que se cobre el 10% de todo el salario. El impuesto acumulado en la mediana resulta 443,23 euros. En el punto del 20% —59.080,52 euros— el impuesto integrado resulta 6.094,37 euros. Los valores son menores que en la variante efectiva porque solo se cobra cada tipo sobre el ingreso de su correspondiente tramo de la curva.
+
+La diferencia entre las dos columnas de impuesto no es un error numérico: muestra que «10% en la mediana» puede significar dos cosas distintas. Si la intención es una tasa total sobre la renta, corresponde la variante efectiva. Si la intención es que cada euro adicional vaya tributando gradualmente a tasas crecientes, corresponde una variante marginal, que requiere definir el impuesto total como integral.
+
+Debajo del SMI, para esta prueba se conserva explícitamente el impuesto negativo efectivo de la fórmula original. No se extrapola hacia abajo la curva cúbica marginal. Por eso la regla bajo el SMI aún necesitaría una decisión propia antes de adoptar la variante marginal como modelo definitivo.
+
+El punto máximo de 1.000.000 euros continúa siendo un supuesto ilustrativo, no una cifra oficial observada. Estos gráficos comparan curvas para salarios individuales y no son una estimación de la recaudación estatal.
+
+== Reproducir la prueba
+
+El archivo `boring_ahh_interpolation_test.py` genera esta comparación, la gráfica y un CSV con una rejilla de salarios. La prueba no modifica `boring_ahh_math.py`; es un experimento paralelo para decidir qué interpretación conviene al proyecto.
